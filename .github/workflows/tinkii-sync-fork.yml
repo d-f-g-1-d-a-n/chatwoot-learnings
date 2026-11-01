@@ -1,0 +1,50 @@
+# Tinkii research fork synchronization. Does not deploy or change xTago.
+# Only updates d-f-g-1-d-a-n/chatwoot-learnings:develop from chatwoot/chatwoot:develop.
+name: Tinkii - Sync Chatwoot upstream develop
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: tinkii-upstream-sync-develop
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'd-f-g-1-d-a-n/chatwoot-learnings'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fork develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Fetch and merge upstream develop safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/chatwoot/chatwoot.git
+          git fetch upstream develop
+          BEFORE="$(git rev-parse HEAD)"
+          UPSTREAM="$(git rev-parse upstream/develop)"
+          echo "### Tinkii Chatwoot fork synchronization" >> "$GITHUB_STEP_SUMMARY"
+          echo "Fork before: $BEFORE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Upstream checked: $UPSTREAM" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Incoming commits (up to 100)" >> "$GITHUB_STEP_SUMMARY"
+          git log --no-merges --oneline HEAD..upstream/develop | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          # No resets, no rebases and no force-pushes. Conflicts stop the run.
+          git merge --no-edit upstream/develop
+          AFTER="$(git rev-parse HEAD)"
+          if [ "$AFTER" != "$BEFORE" ]; then
+            git push origin HEAD:develop
+            echo "Fork updated to $AFTER" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Fork already up to date." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          git merge-base --is-ancestor upstream/develop HEAD
